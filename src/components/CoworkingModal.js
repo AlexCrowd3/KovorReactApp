@@ -13,6 +13,7 @@ import {
 import Modal from 'react-native-modal';
 import { ThemeContext } from '../context/ThemeContext';
 import Svg, { Path } from 'react-native-svg';
+import Typography from '../styles/Typography';
 
 const { width, height } = Dimensions.get('window');
 
@@ -100,11 +101,7 @@ export default function CoworkingModal({ isVisible, onClose, coworking }) {
                 <Image source={{ uri: coworking.logo_url }} style={styles.logo} />
             </View>
             <View style={styles.container} {...panResponderRef.current?.panHandlers}>
-                {/* Полоска для свайпа */}
                 <View style={styles.swipeIndicator} />
-
-
-
                 <View style={styles.infoContainer}>
                     <Text style={styles.name}>{coworking.name}</Text>
 
@@ -134,13 +131,11 @@ export default function CoworkingModal({ isVisible, onClose, coworking }) {
                         <Text style={styles.value}>Ежедневно {coworking.open_time}–{coworking.close_time}</Text>
                     </View>
 
-                    {/* Адрес */}
                     <View style={styles.infoRow}>
                         <Text style={styles.label}>Адрес</Text>
                         <Text style={styles.addressValue}>{coworking.address}</Text>
                     </View>
 
-                    {/* Контакты */}
                     <View style={styles.contactsSection}>
                         <Text style={styles.contactsTitle}>Контакты</Text>
 
@@ -150,29 +145,26 @@ export default function CoworkingModal({ isVisible, onClose, coworking }) {
                                 onPress={() => openLink('tel:+79587736520')}
                             >
                                 <Text style={styles.contactText}>{coworking.telephone_number}</Text>
-                                <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                    <Path
-                                        d="M3.654 1.328L1.798 3.184a1.5 1.5 0 00-.418 1.367l.418 2.736a1.5 1.5 0 001.367 1.184h.736l.818 4.091a1.5 1.5 0 001.367 1.184h2.736a1.5 1.5 0 001.367-1.184l.818-4.091h.736a1.5 1.5 0 001.367-1.184l.418-2.736a1.5 1.5 0 00-.418-1.367l-1.856-1.856A1.5 1.5 0 0010.518.5H5.482a1.5 1.5 0 00-1.828.828z"
-                                        fill={theme.textSecondary}
-                                    />
-                                </Svg>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.contactItem}
-                                onPress={() => openLink('https://www.prostospb.team')}
-                            >
-                                <Text style={styles.contactText}>www.prostospb.team</Text>
-                                <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                    <Path
-                                        d="M14 8a6 6 0 10-6 6h6V8zM8 14a6 6 0 110-12 6 6 0 010 12z"
-                                        fill={theme.textSecondary}
-                                    />
-                                </Svg>
                             </TouchableOpacity>
                         </View>
                     </View>
+                    <View style={styles.socialButtonsContainer}>
+                        <TouchableOpacity
+                            style={[styles.socialButton, { backgroundColor: '#0088cc' }]}
+                            onPress={() => openLink(coworking.telegram_url)}
+                        >
+                            <Text style={styles.socialButtonText}>Telegram</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.socialButton, { backgroundColor: '#25D366' }]}
+                            onPress={() => openLink(coworking.whatsapp_url)}
+                        >
+                            <Text style={styles.socialButtonText}>WhatsApp</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
+
             </View>
         </Modal>
     );
@@ -189,7 +181,7 @@ const getStyles = (theme) =>
             backgroundColor: theme.background,
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
-            maxHeight: '90%',
+            height: height - 270,
         },
         swipeIndicator: {
             width: 40,
@@ -273,8 +265,6 @@ const getStyles = (theme) =>
             alignItems: 'flex-start',
             marginBottom: 12,
             paddingBottom: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.border,
         },
         label: {
             fontSize: 14,
@@ -307,7 +297,6 @@ const getStyles = (theme) =>
             marginBottom: 12,
         },
         contactItems: {
-            backgroundColor: theme.cardBackground,
             borderRadius: 12,
             overflow: 'hidden',
         },
@@ -316,9 +305,6 @@ const getStyles = (theme) =>
             justifyContent: 'space-between',
             alignItems: 'center',
             paddingVertical: 12,
-            paddingHorizontal: 16,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.border,
         },
         contactText: {
             fontSize: 14,
@@ -326,4 +312,24 @@ const getStyles = (theme) =>
             color: theme.textPrimary,
             flex: 1,
         },
+        socialButtonsContainer: {
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'stretch',
+            marginTop: 20,
+            marginBottom: 40,
+            paddingHorizontal: 16,
+            gap: 12,
+        },
+        socialButton: {
+            paddingVertical: 10,
+            borderRadius: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        socialButtonText: {
+            ...Typography.subheadline_regular,
+            color: '#FFF',
+        },
+
     });

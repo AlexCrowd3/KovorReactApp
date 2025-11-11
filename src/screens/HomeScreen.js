@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
-import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
+import { View, StyleSheet, Dimensions, TouchableOpacity, Platform, ActivityIndicator, Image, Text } from 'react-native';
+import MapView, { PROVIDER_GOOGLE, Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Svg, { Path } from 'react-native-svg';
 import BottomSheet from '../components/BottomSheet';
 import { ThemeContext } from '../context/ThemeContext';
 import FilterModal from '../components/FilterModal';
 import CoworkingModal from '../components/CoworkingModal';
+import { fetchCoworkings } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,43 +31,42 @@ export default function HomeScreen() {
     const mapRef = useRef(null);
     const [location, setLocation] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [coworkings, setCoworkings] = useState([]);
     const { theme, toggleTheme } = useContext(ThemeContext);
     const [isFilterVisible, setFilterVisible] = useState(false);
-    const openFilter = () => setFilterVisible(true);
-    const closeFilter = () => setFilterVisible(false);
     const [selectedCoworking, setSelectedCoworking] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
+    const [isDark, setIsDark] = useState(theme.mode === 'dark');
 
+    useEffect(() => setIsDark(theme.mode === 'dark'), [theme]);
+
+    const openFilter = () => setFilterVisible(true);
+    const closeFilter = () => setFilterVisible(false);
     const openCoworkingModal = (cw) => {
+        if (!cw) return;
         setSelectedCoworking(cw);
         setModalVisible(true);
     };
 
-    const [isDark, setIsDark] = useState(theme.mode === 'dark');
-
-    useEffect(() => {
-        setIsDark(theme.mode === 'dark');
-    }, [theme]);
-
     const styles = getStyles(theme);
 
+    // Получаем координаты пользователя
     useEffect(() => {
         let isMounted = true;
         (async () => {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
-                    console.warn('Permission to access location was denied');
+                    console.warn('Permission denied');
                     if (isMounted) setLoading(false);
                     return;
                 }
 
-                const race = Promise.race([
+                const loc = await Promise.race([
                     Location.getCurrentPositionAsync({}),
                     new Promise((_, rej) => setTimeout(() => rej(new Error('location timeout')), 7000)),
                 ]);
 
-                const loc = await race;
                 const coords = loc?.coords;
                 if (isMounted && coords?.latitude && coords?.longitude) {
                     setLocation({ latitude: coords.latitude, longitude: coords.longitude });
@@ -77,41 +77,78 @@ export default function HomeScreen() {
                         latitudeDelta: 0.02,
                         longitudeDelta: 0.02,
                     };
-                    if (mapRef.current?.animateToRegion) {
-                        setTimeout(() => mapRef.current.animateToRegion(newRegion, 500), 300);
-                    }
+
+                    mapRef.current?.animateToRegion(newRegion, 500);
                 }
             } catch (err) {
                 console.warn('Location error or timeout:', err);
-            } finally {
-                if (isMounted) setLoading(false);
             }
         })();
 
+        return () => { isMounted = false; };
+    }, []);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadCoworkings = async () => {
+            try {
+                const data = await fetchCoworkings();
+                const validData = Array.isArray(data)
+                    ? data.filter(cw => cw?.latitude && cw?.longitude && cw?.id)
+                    : [];
+                if (isMounted) setCoworkings(validData);
+            } catch (err) {
+                console.error('Ошибка при загрузке коворкингов:', err);
+            } finally {
+                if (isMounted) setLoading(false);
+            }
+        };
+
+        loadCoworkings();
+        const interval = setInterval(loadCoworkings, 2000);
+
         return () => {
             isMounted = false;
+            clearInterval(interval);
         };
     }, []);
+
 
     if (loading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="large" color="#C8F000" />
+                <ActivityIndicator size="large" color={theme.green} />
             </View>
         );
     }
+
     return (
         <View style={styles.container}>
             <MapView
                 ref={mapRef}
                 provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : null}
                 style={styles.map}
-                initialRegion={INITIAL_REGION}       // рендерим сразу
-                customMapStyle={darkMapStyle}
-                showsUserLocation={false}           // ОТКЛЮЧАЕМ встроенный user location until we have coords
+                initialRegion={INITIAL_REGION}
+                customMapStyle={Platform.OS === 'android' && isDark ? darkMapStyle : []}
+                showsUserLocation={true}
                 showsMyLocationButton={false}
             >
+                {coworkings.map(cw => (
+                    <Marker
+                        key={cw.id.toString()}
+                        coordinate={{ latitude: Number(cw.latitude), longitude: Number(cw.longitude) }}
+                        onPress={() => openCoworkingModal(cw)}
+                    >
+                        <View style={{ backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center', borderRadius: 40, }}>
+                            <Image
+                                source={{ uri: cw.logo_url }}
+                                style={{ width: 30, height: 30, }}
+                            />
+                        </View>
 
+                    </Marker>
+                ))}
             </MapView>
 
             <TouchableOpacity
@@ -184,17 +221,8 @@ export default function HomeScreen() {
                 </TouchableOpacity>
             </View>
 
-            <FilterModal
-                isVisible={isFilterVisible}
-                onClose={() => setFilterVisible(false)}
-            />
-
-            <CoworkingModal
-                isVisible={modalVisible}
-                onClose={() => setModalVisible(false)}
-                coworking={selectedCoworking}
-            />
-
+            <FilterModal isVisible={isFilterVisible} onClose={closeFilter} />
+            <CoworkingModal isVisible={modalVisible} onClose={() => setModalVisible(false)} coworking={selectedCoworking} />
             <BottomSheet openFilter={openFilter} openCoworkingModal={openCoworkingModal} />
         </View>
     );
@@ -219,6 +247,113 @@ const getStyles = (theme) => StyleSheet.create({
         alignItems: 'center',
         marginVertical: 6,
     },
+    themeToggleBtn: {
+        position: 'absolute',
+        top: 70,
+        right: 18,
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: theme.backgroundOpacity,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    customMarker: {
+        backgroundColor: theme.background,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: theme.green,
+        width: 40, // Фиксированная ширина
+        height: 40, // Фиксированная высота
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+
+    markerLogo: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        marginRight: 6,
+    },
+
+    markerTextContainer: {
+        flex: 1,
+    },
+
+    markerText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.textPrimary,
+    },
+    calloutContainer: {
+        backgroundColor: theme.background,
+        padding: 12,
+        borderRadius: 12,
+        minWidth: 120,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: theme.border,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+    },
+    calloutImage: {
+        width: 50,
+        height: 50,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    simpleMarker: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: theme.background,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: theme.green,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+
+    calloutText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: theme.textPrimary,
+        textAlign: 'center',
+    },
+
+    controls: {
+        position: 'absolute',
+        right: 18,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        height: 130,
+    },
+
+    controlBtn: {
+        backgroundColor: theme.backgroundOpacity,
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginVertical: 6,
+    },
+
     themeToggleBtn: {
         position: 'absolute',
         top: 70,

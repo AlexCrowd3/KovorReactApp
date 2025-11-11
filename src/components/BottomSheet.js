@@ -17,7 +17,7 @@ import { ThemeContext } from '../context/ThemeContext';
 import Typography from '../styles/Typography';
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase'; // <-- клиент Supabase
+import { supabase } from '../lib/supabase';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = 120;
@@ -82,6 +82,22 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
         }).start();
     };
 
+    const toggleQuickFilter = async (key, value) => {
+        let newFilters = { ...filters };
+        if (key === 'rating' || key === 'cost' || key === 'workTime') {
+            newFilters[key] = newFilters[key] === value ? null : value;
+        } else {
+            const arr = newFilters[key] || [];
+            newFilters[key] = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+        }
+        setFilters(newFilters);
+        try {
+            await AsyncStorage.setItem('@filters', JSON.stringify(newFilters));
+        } catch (e) {
+            console.warn('Failed to save filters', e);
+        }
+    };
+
     const panResponder = useRef(
         PanResponder.create({
             onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
@@ -133,46 +149,63 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
     const loadFilters = useCallback(async () => {
         try {
             const saved = await AsyncStorage.getItem('@filters');
-            if (saved) setFilters(JSON.parse(saved));
+            if (saved) {
+                setFilters(JSON.parse(saved));
+            } else {
+                setFilters({}); // если нет сохранённых фильтров, используем пустой объект
+            }
         } catch (e) {
             console.warn('Failed to load filters', e);
+            setFilters({}); // на случай ошибки
         }
     }, []);
+
 
     const loadCoworkings = useCallback(async () => {
         try {
             let query = supabase.from('coworkings').select('*');
 
-            if (filters.network?.length) {
-                query = query.in('network', filters.network);
-            }
-            if (filters.cost?.length) {
-                query = query.in('cost', filters.cost);
-            }
-            if (filters.rating) {
-                query = query.gte('rating', parseFloat(filters.rating));
-            }
+            // Фильтры применяем только если они существуют и не пустые
+            if (filters.network?.length > 0) query = query.in('network', filters.network);
+            if (filters.cost) query = query.eq('cost', filters.cost);
+            if (filters.rating) query = query.gte('rating', parseFloat(filters.rating));
 
             const { data, error } = await query;
-            if (error) console.warn(error);
 
-            if (data) {
-                let processed = data.map(cw => {
-                    const open = isOpenNow(cw.open_time, cw.close_time);
-                    const distance = getDistance(USER_LAT, USER_LON, cw.latitude, cw.longitude);
-                    return { ...cw, isOpenNow: open, distance: distance.toFixed(1) };
-                });
-
-                if (searchText) {
-                    processed = processed.filter(c => c.name.toLowerCase().includes(searchText.toLowerCase()));
-                }
-
-                setCoworkings(processed);
+            if (error) {
+                console.warn(error);
+                setCoworkings([]); // в случае ошибки показываем пустой массив
+                return;
             }
+
+            if (!data) {
+                setCoworkings([]);
+                return;
+            }
+
+            let processed = data.map(cw => {
+                const open = isOpenNow(cw.open_time, cw.close_time);
+                const distance = getDistance(USER_LAT, USER_LON, cw.latitude, cw.longitude);
+                return { ...cw, isOpenNow: open, distance: distance.toFixed(1) };
+            });
+
+            // Применяем фильтр "Открыто сейчас" только если выбран
+            if (filters.workTime === 'Открыто сейчас') {
+                processed = processed.filter(c => c.isOpenNow);
+            }
+
+            // Применяем поиск по имени
+            if (searchText) {
+                processed = processed.filter(c => c.name.toLowerCase().includes(searchText.toLowerCase()));
+            }
+
+            setCoworkings(processed);
         } catch (err) {
             console.warn(err);
+            setCoworkings([]); // при ошибке показываем пустой массив
         }
     }, [filters, searchText]);
+
 
     useEffect(() => {
         loadFilters();
@@ -184,7 +217,6 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
 
     return (
         <Animated.View
-
             style={[
                 styles.sheet,
                 {
@@ -225,29 +257,34 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
                     directionalLockEnabled={true}
                 >
                     <TouchableOpacity style={styles.filterBtn} onPress={openFilter}>
-                        <Svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <Path d="M10.1819 10.9091H15.2728M2.18188 10.9091H3.63643M3.63643 10.9091C3.63643 11.9133 4.45046 12.7273 5.45461 12.7273C6.45877 12.7273 7.27279 11.9133 7.27279 10.9091C7.27279 9.90496 6.45877 9.09093 5.45461 9.09093C4.45046 9.09093 3.63643 9.90496 3.63643 10.9091ZM14.5455 6.54548H15.2728M2.18188 6.54548H7.27279M12.0001 8.36366C10.9959 8.36366 10.1819 7.54963 10.1819 6.54548C10.1819 5.54132 10.9959 4.72729 12.0001 4.72729C13.0042 4.72729 13.8182 5.54132 13.8182 6.54548C13.8182 7.54963 13.0042 8.36366 12.0001 8.36366Z" stroke={theme.textPrimary} stroke-width="1.45455" stroke-linecap="round" stroke-linejoin="round" />
+                        <Svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <Path d="M10.1819 10.9091H15.2728M2.18188 10.9091H3.63643M3.63643 10.9091C3.63643 11.9133 4.45046 12.7273 5.45461 12.7273C6.45877 12.7273 7.27279 11.9133 7.27279 10.9091C7.27279 9.90496 6.45877 9.09093 5.45461 9.09093C4.45046 9.09093 3.63643 9.90496 3.63643 10.9091ZM14.5455 6.54548H15.2728M2.18188 6.54548H7.27279M12.0001 8.36366C10.9959 8.36366 10.1819 7.54963 10.1819 6.54548C10.1819 5.54132 10.9959 4.72729 12.0001 4.72729C13.0042 4.72729 13.8182 5.54132 13.8182 6.54548C13.8182 7.54963 13.0042 8.36366 12.0001 8.36366Z" stroke={theme.textPrimary} strokeWidth="1.45455" strokeLinecap="round" strokeLinejoin="round" />
                         </Svg>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.filterBtn}>
-                        <Text style={styles.filterText}>Выбрать сеть</Text>
-                        <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <Path d="M15 11L12 14L9 11" stroke={theme.textPrimary} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </Svg>
+
+                    <TouchableOpacity
+                        style={[styles.filterBtn, filters.rating === '4.7' && styles.filterBtnActive]}
+                        onPress={() => toggleQuickFilter('rating', '4.7')}
+                    >
+                        <Text style={[styles.filterText, filters.rating === '4.7' && styles.filterTextActive]}>Выше 4.7</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.filterBtn}>
-                        <Text style={styles.filterText}>Выше 4.7</Text>
+
+                    <TouchableOpacity
+                        style={[styles.filterBtn, filters.cost === 'Бесплатно' && styles.filterBtnActive]}
+                        onPress={() => toggleQuickFilter('cost', 'Бесплатно')}
+                    >
+                        <Text style={[styles.filterText, filters.cost === 'Бесплатно' && styles.filterTextActive]}>Бесплатно</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.filterBtn}>
-                        <Text style={styles.filterText}>Поблизости</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.filterBtn}>
-                        <Text style={styles.filterText}>Открыто</Text>
+
+                    <TouchableOpacity
+                        style={[styles.filterBtn, filters.workTime === 'Открыто сейчас' && styles.filterBtnActive]}
+                        onPress={() => toggleQuickFilter('workTime', 'Открыто сейчас')}
+                    >
+                        <Text style={[styles.filterText, filters.workTime === 'Открыто сейчас' && styles.filterTextActive]}>Открыто</Text>
                     </TouchableOpacity>
                 </ScrollView>
             </Animated.View>
 
-            {/* Список */}
             <FlatList
                 style={styles.list}
                 data={coworkings}
@@ -262,7 +299,7 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
                             </View>
                             <View style={styles.rateCont}>
                                 <View style={styles.rating}>
-                                    <Svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                                         <Path d="M1.55664 6.89118C1.34781 6.69806 1.46125 6.34893 1.74371 6.31544L5.74609 5.84071C5.86122 5.82706 5.96121 5.75477 6.00977 5.6495L7.69792 1.98964C7.81705 1.73135 8.18425 1.7313 8.30339 1.98959L9.99154 5.64942C10.0401 5.75469 10.1394 5.82718 10.2546 5.84083L14.2572 6.31544C14.5396 6.34893 14.6527 6.69816 14.4439 6.89128L11.4852 9.62794C11.4001 9.70665 11.3622 9.8238 11.3848 9.93751L12.17 13.8906C12.2254 14.1696 11.9285 14.3858 11.6803 14.2469L8.16343 12.2777C8.06227 12.2211 7.93938 12.2214 7.83822 12.278L4.32096 14.2464C4.07275 14.3853 3.77529 14.1696 3.83073 13.8906L4.6161 9.93776C4.63869 9.82405 4.60089 9.70662 4.51578 9.62792L1.55664 6.89118Z" fill="#FFC600" />
                                     </Svg>
                                     <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
@@ -314,12 +351,10 @@ const getStyles = (theme) => StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         marginTop: 6,
-
     },
-    input: { flex: 1, color: theme.textPrimary, marginLeft: 8, },
-
-    filterScroll: { marginTop: 12, height: 45, },
-    filterRow: { paddingHorizontal: 20, alignItems: 'center', height: 42, },
+    input: { flex: 1, color: theme.textPrimary, marginLeft: 8 },
+    filterScroll: { marginTop: 12, height: 45, zIndex: 400 },
+    filterRow: { paddingHorizontal: 20, alignItems: 'center', height: 42 },
     filterBtn: {
         height: 32,
         paddingHorizontal: 14,
@@ -336,7 +371,7 @@ const getStyles = (theme) => StyleSheet.create({
     filterText: { color: theme.textPrimary, fontSize: 14 },
     filterTextActive: { color: '#000', fontWeight: '700' },
 
-    list: { marginTop: 12, marginBottom: 100, },
+    list: { marginTop: 12, marginBottom: 100 },
     card: {
         flexDirection: 'row',
         marginHorizontal: 16,
@@ -347,15 +382,11 @@ const getStyles = (theme) => StyleSheet.create({
     cardBody: { flex: 1 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     cardTitle: { color: theme.textPrimary, fontWeight: '500', fontSize: 16 },
-    rateCont: { flexDirection: 'row', marginTop: 4, },
-    rateCount: {
-        ...Typography.caption_primary,
-        color: theme.textSecondary,
-        marginLeft: 5,
-    },
-    rating: { backgroundColor: theme.backgroundOpacity, width: 60, alignItems: 'center', paddingVertical: 4, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', },
+    rateCont: { flexDirection: 'row', marginTop: 4 },
+    rateCount: { ...Typography.caption_primary, color: theme.textSecondary, marginLeft: 5 },
+    rating: { backgroundColor: theme.backgroundOpacity, width: 60, alignItems: 'center', paddingVertical: 4, borderRadius: 12, flexDirection: 'row', justifyContent: 'center' },
     distance: { ...Typography.caption_primary, color: theme.textSecondary },
-    ratingText: { color: theme.textPrimary, marginLeft: 3, lineHeight: 20, },
+    ratingText: { color: theme.textPrimary, marginLeft: 3, lineHeight: 20 },
     address: { color: theme.textPrimary, marginTop: 4 },
     open: { color: theme.textSecondary, marginTop: 4 },
 });
