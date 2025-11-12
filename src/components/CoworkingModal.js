@@ -145,14 +145,14 @@ export default function CoworkingModal({ isVisible, onClose, coworking }) {
                     </View>
                     <View style={styles.socialButtonsContainer}>
                         <TouchableOpacity
-                            style={[styles.socialButton, { backgroundColor: '#0088cc' }]}
+                            style={[styles.socialButton, { backgroundColor: theme.backgroundOpacity }]}
                             onPress={() => openLink(coworking.telegram_url)}
                         >
                             <Text style={styles.socialButtonText}>Telegram</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                            style={[styles.socialButton, { backgroundColor: '#25D366' }]}
+                            style={[styles.socialButton, { backgroundColor: theme.backgroundOpacity }]}
                             onPress={() => openLink(coworking.whatsapp_url)}
                         >
                             <Text style={styles.socialButtonText}>WhatsApp</Text>
@@ -326,5 +326,4 @@ const getStyles = (theme) =>
             ...Typography.subheadline_regular,
             color: '#FFF',
         },
-
     });

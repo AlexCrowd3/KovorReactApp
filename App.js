@@ -1,33 +1,24 @@
 import 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { StatusBar } from 'react-native';
+import { StatusBar, Platform } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 
 import SplashScreen from './src/screens/SplashScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import { ThemeProvider } from './src/context/ThemeContext';
-import { testSupabaseConnection } from './src/testSupabase';
 
 const Stack = createStackNavigator();
 
-// Кастомная тёмная тема для навигации
-const CustomDarkTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: '#000000',
-    card: '#000000',
-    text: '#FFFFFF',
-    border: '#333333',
-    primary: '#4CAF50',
-  },
-};
-
 export default function App() {
   useEffect(() => {
-    testSupabaseConnection();
+    if (Platform.OS === 'android') {
+      // Заливаем нижнюю панель навигации
+      NavigationBar.setBackgroundColorAsync('#000000');
+      NavigationBar.setButtonStyleAsync('light'); // светлые иконки
+    }
   }, []);
 
   return (
@@ -36,9 +27,9 @@ export default function App() {
         <StatusBar
           backgroundColor="#000000"
           barStyle="light-content"
-          translucent={false}
+          translucent={false} // отключает прозрачность статус бара
         />
-        <NavigationContainer theme={CustomDarkTheme}>
+        <NavigationContainer>
           <Stack.Navigator
             screenOptions={{
               headerShown: false,
@@ -52,18 +43,14 @@ export default function App() {
               name="Splash"
               component={SplashScreen}
               options={{
-                contentStyle: {
-                  backgroundColor: '#000000',
-                },
+                contentStyle: { backgroundColor: '#000000' },
               }}
             />
             <Stack.Screen
               name="Home"
               component={HomeScreen}
               options={{
-                contentStyle: {
-                  backgroundColor: '#000000',
-                },
+                contentStyle: { backgroundColor: '#000000' },
               }}
             />
           </Stack.Navigator>

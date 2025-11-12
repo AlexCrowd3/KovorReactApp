@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity, Platform, ActivityIndicator, Text } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Svg, { Path } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import BottomSheet from '../components/BottomSheet';
 import { ThemeContext } from '../context/ThemeContext';
 import FilterModal from '../components/FilterModal';
@@ -25,26 +26,35 @@ const INITIAL_REGION = {
     longitudeDelta: 0.05,
 };
 
-const darkMapStyle = [
-    { elementType: 'geometry', stylers: [{ color: '#071224' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#7f98a6' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#18324a' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#041628' }] },
-    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#081824' }] },
-    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-];
+const isOpenNow = (open_time, close_time) => {
+    if (!open_time || !close_time) return false;
+    const now = new Date();
+    const [oh, om] = open_time.split(':').map(Number);
+    const [ch, cm] = close_time.split(':').map(Number);
+    const open = new Date(now);
+    open.setHours(oh, om, 0, 0);
+    const close = new Date(now);
+    close.setHours(ch, cm, 0, 0);
+    return now >= open && now <= close;
+};
+
+const isOpen24h = (open_time, close_time) => {
+    return open_time === '00:00' && close_time === '23:59';
+};
 
 export default function HomeScreen() {
     const mapRef = useRef(null);
     const [location, setLocation] = useState(null);
     const [loading, setLoading] = useState(true);
     const [coworkings, setCoworkings] = useState([]);
+    const [filteredCoworkings, setFilteredCoworkings] = useState([]);
     const { theme, toggleTheme } = useContext(ThemeContext);
     const [isFilterVisible, setFilterVisible] = useState(false);
     const [selectedCoworking, setSelectedCoworking] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [isDark, setIsDark] = useState(theme.mode === 'dark');
     const [mapReady, setMapReady] = useState(false);
+    const [filters, setFilters] = useState({});
 
     useEffect(() => setIsDark(theme.mode === 'dark'), [theme]);
 
@@ -59,12 +69,81 @@ export default function HomeScreen() {
 
     const styles = getStyles(theme);
 
-    // Получаем координаты пользователя
+    const loadFilters = async () => {
+        try {
+            const saved = await AsyncStorage.getItem('@filters');
+            if (saved) {
+                setFilters(JSON.parse(saved));
+            } else {
+                setFilters({});
+            }
+        } catch (e) {
+            console.warn('Failed to load filters', e);
+            setFilters({});
+        }
+    };
+
+    const applyFilters = useCallback((coworkingsData, currentFilters) => {
+        if (!coworkingsData.length) return [];
+
+        let filtered = [...coworkingsData];
+
+        if (currentFilters.workTime === 'Открыто сейчас') {
+            filtered = filtered.filter(cw => isOpenNow(cw.open_time, cw.close_time));
+        } else if (currentFilters.workTime === 'Круглосуточно') {
+            filtered = filtered.filter(cw => isOpen24h(cw.open_time, cw.close_time));
+        }
+
+        if (currentFilters.rating) {
+            const minRating = parseFloat(currentFilters.rating);
+            filtered = filtered.filter(cw => cw.rating >= minRating);
+        }
+
+        if (currentFilters.cost === 'Бесплатно') {
+            filtered = filtered.filter(cw => cw.price === 0 || cw.price === null);
+        } else if (currentFilters.cost === 'Платно') {
+            filtered = filtered.filter(cw => cw.price > 0);
+        }
+
+        return filtered;
+    }, []);
+
     useEffect(() => {
         let isMounted = true;
 
         (async () => {
             try {
+                if (Platform.OS === 'ios') {
+                    console.log('iOS simulator - using saved/default location');
+
+                    let savedLocation;
+                    try {
+                        const savedLocationJson = await AsyncStorage.getItem('user_location');
+                        savedLocation = savedLocationJson ? JSON.parse(savedLocationJson) : null;
+                    } catch (e) {
+                        console.log('No saved location found');
+                    }
+
+                    const defaultLocation = savedLocation || {
+                        latitude: 59.9311,
+                        longitude: 30.3609
+                    };
+
+                    if (isMounted) {
+                        setLocation(defaultLocation);
+                        setLoading(false);
+
+                        setTimeout(() => {
+                            mapRef.current?.animateToRegion({
+                                ...defaultLocation,
+                                latitudeDelta: 0.02,
+                                longitudeDelta: 0.02,
+                            }, 500);
+                        }, 1000);
+                    }
+                    return;
+                }
+
                 const { status } = await Location.requestForegroundPermissionsAsync();
                 if (status !== 'granted') {
                     console.warn('Permission denied');
@@ -100,13 +179,19 @@ export default function HomeScreen() {
                 }
             } catch (err) {
                 console.warn('Location error or timeout:', err);
+                if (isMounted) {
+                    setLocation({
+                        latitude: INITIAL_REGION.latitude,
+                        longitude: INITIAL_REGION.longitude
+                    });
+                    setLoading(false);
+                }
             }
         })();
 
         return () => { isMounted = false; };
     }, []);
 
-    // Загрузка коворкингов
     useEffect(() => {
         let isMounted = true;
 
@@ -126,6 +211,9 @@ export default function HomeScreen() {
 
                 if (isMounted) {
                     setCoworkings(validData);
+                    // Применяем текущие фильтры к загруженным данным
+                    const filtered = applyFilters(validData, filters);
+                    setFilteredCoworkings(filtered);
                 }
             } catch (err) {
                 console.error('Ошибка при загрузке коворкингов:', err);
@@ -138,6 +226,36 @@ export default function HomeScreen() {
 
         return () => { isMounted = false; };
     }, []);
+
+    useEffect(() => {
+        loadFilters();
+    }, []);
+
+    useEffect(() => {
+        if (coworkings.length > 0) {
+            const filtered = applyFilters(coworkings, filters);
+            setFilteredCoworkings(filtered);
+        }
+    }, [filters, coworkings, applyFilters]);
+
+    useEffect(() => {
+        const checkFiltersUpdate = async () => {
+            try {
+                const saved = await AsyncStorage.getItem('@filters');
+                if (saved) {
+                    const newFilters = JSON.parse(saved);
+                    if (JSON.stringify(newFilters) !== JSON.stringify(filters)) {
+                        setFilters(newFilters);
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to check filters update', e);
+            }
+        };
+
+        const interval = setInterval(checkFiltersUpdate, 2000);
+        return () => clearInterval(interval);
+    }, [filters]);
 
     if (loading) {
         return (
@@ -155,8 +273,7 @@ export default function HomeScreen() {
                 provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : null}
                 style={styles.map}
                 initialRegion={INITIAL_REGION}
-                customMapStyle={Platform.OS === 'android' && isDark ? darkMapStyle : []}
-                showsUserLocation={true}
+                showsUserLocation={Platform.OS === 'android' && true}
                 showsMyLocationButton={false}
                 onMapReady={() => setMapReady(true)}
                 minZoomLevel={10}
@@ -166,12 +283,12 @@ export default function HomeScreen() {
                 cachedEnabled={true}
                 loadingEnabled={true}
             >
-                {mapReady && coworkings.map(cw => (
+                {mapReady && filteredCoworkings.map(cw => (
                     <Marker
                         key={cw.id.toString()}
                         coordinate={{
-                            latitude: Number(cw.latitude),
-                            longitude: Number(cw.longitude)
+                            latitude: Number(cw.latitude) || INITIAL_REGION.latitude,
+                            longitude: Number(cw.longitude) || INITIAL_REGION.longitude
                         }}
                         onPress={() => openCoworkingModal(cw)}
                         pinColor={theme.green}
@@ -179,16 +296,6 @@ export default function HomeScreen() {
                     />
                 ))}
             </MapView>
-
-            {/* Индикатор оффлайн зоны */}
-            <View style={styles.offlineIndicator}>
-                <Text style={[styles.offlineText, { color: theme.textPrimary }]}>
-                    Оффлайн карта: Санкт-Петербург и область
-                </Text>
-                <Text style={[styles.offlineText, { color: theme.textPrimary, fontSize: 10 }]}>
-                    Коворкингов: {coworkings.length}
-                </Text>
-            </View>
 
             <TouchableOpacity
                 style={styles.themeToggleBtn}
@@ -297,19 +404,5 @@ const getStyles = (theme) => StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 10,
-    },
-    offlineIndicator: {
-        position: 'absolute',
-        top: 70,
-        left: 18,
-        backgroundColor: theme.backgroundOpacity,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        zIndex: 10,
-    },
-    offlineText: {
-        fontSize: 12,
-        fontWeight: '500',
     },
 });

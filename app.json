@@ -19,7 +19,7 @@
       "userInterfaceStyle": "dark",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
       },
       "package": "com.Kovor.SearchCoworkingSpaces"
@@ -31,7 +31,8 @@
     },
     "androidNavigationBar": {
       "backgroundColor": "#000000",
-      "barStyle": "light-content"
+      "barStyle": "light-content",
+      "visible": true
     }
   }
 }

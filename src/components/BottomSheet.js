@@ -52,6 +52,10 @@ const isOpenNow = (open_time, close_time) => {
     return now >= open && now <= close;
 };
 
+const isOpen24h = (open_time, close_time) => {
+    return open_time === '00:00' && close_time === '23:59';
+};
+
 const BottomSheet = ({ openFilter, openCoworkingModal }) => {
     const translateY = useRef(new Animated.Value(SCREEN_HEIGHT - COLLAPSED_HEIGHT)).current;
     const { theme } = useContext(ThemeContext);
@@ -82,14 +86,38 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
         }).start();
     };
 
+    const [coworkings, setCoworkings] = useState([]);
+    const [filters, setFilters] = useState({});
+    const [searchText, setSearchText] = useState('');
+
+    // Загрузка фильтров из AsyncStorage
+    const loadFilters = useCallback(async () => {
+        try {
+            const saved = await AsyncStorage.getItem('@filters');
+            if (saved) {
+                setFilters(JSON.parse(saved));
+            } else {
+                setFilters({});
+            }
+        } catch (e) {
+            console.warn('Failed to load filters', e);
+            setFilters({});
+        }
+    }, []);
+
+    // Функция для переключения быстрых фильтров
     const toggleQuickFilter = async (key, value) => {
         let newFilters = { ...filters };
+
         if (key === 'rating' || key === 'cost' || key === 'workTime') {
+            // Для рейтинга, стоимости и времени работы - переключаем значение
             newFilters[key] = newFilters[key] === value ? null : value;
         } else {
+            // Для других фильтров (если будут) - работа с массивами
             const arr = newFilters[key] || [];
             newFilters[key] = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
         }
+
         setFilters(newFilters);
         try {
             await AsyncStorage.setItem('@filters', JSON.stringify(newFilters));
@@ -97,6 +125,70 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
             console.warn('Failed to save filters', e);
         }
     };
+
+    // Основная функция загрузки и фильтрации коворкингов
+    const loadCoworkings = useCallback(async () => {
+        try {
+            let query = supabase.from('coworkings').select('*');
+
+            const { data, error } = await query;
+
+            if (error) {
+                console.warn(error);
+                setCoworkings([]);
+                return;
+            }
+
+            if (!data) {
+                setCoworkings([]);
+                return;
+            }
+
+            let processed = data.map(cw => {
+                const open = isOpenNow(cw.open_time, cw.close_time);
+                const distance = getDistance(USER_LAT, USER_LON, cw.latitude, cw.longitude);
+                const is24h = isOpen24h(cw.open_time, cw.close_time);
+                return {
+                    ...cw,
+                    isOpenNow: open,
+                    is24h: is24h,
+                    distance: distance.toFixed(1)
+                };
+            });
+
+            // Применяем фильтры
+            if (filters.workTime === 'Открыто сейчас') {
+                processed = processed.filter(c => c.isOpenNow);
+            } else if (filters.workTime === 'Круглосуточно') {
+                processed = processed.filter(c => c.is24h);
+            }
+
+            // Фильтр по рейтингу
+            if (filters.rating) {
+                const minRating = parseFloat(filters.rating);
+                processed = processed.filter(c => c.rating >= minRating);
+            }
+
+            // Фильтр по стоимости
+            if (filters.cost === 'Бесплатно') {
+                processed = processed.filter(c => c.price === 0 || c.price === null);
+            } else if (filters.cost === 'Платно') {
+                processed = processed.filter(c => c.price > 0);
+            }
+
+            // Поиск по названию
+            if (searchText) {
+                processed = processed.filter(c =>
+                    c.name.toLowerCase().includes(searchText.toLowerCase())
+                );
+            }
+
+            setCoworkings(processed);
+        } catch (err) {
+            console.warn(err);
+            setCoworkings([]);
+        }
+    }, [filters, searchText]);
 
     const panResponder = useRef(
         PanResponder.create({
@@ -142,71 +234,36 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
         };
     }, []);
 
-    const [coworkings, setCoworkings] = useState([]);
-    const [filters, setFilters] = useState({});
-    const [searchText, setSearchText] = useState('');
-
-    const loadFilters = useCallback(async () => {
-        try {
-            const saved = await AsyncStorage.getItem('@filters');
-            if (saved) {
-                setFilters(JSON.parse(saved));
-            } else {
-                setFilters({});
-            }
-        } catch (e) {
-            console.warn('Failed to load filters', e);
-            setFilters({});
-        }
-    }, []);
-
-
-    const loadCoworkings = useCallback(async () => {
-        try {
-            let query = supabase.from('coworkings').select('*');
-
-            const { data, error } = await query;
-
-            if (error) {
-                console.warn(error);
-                setCoworkings([]);
-                return;
-            }
-
-            if (!data) {
-                setCoworkings([]);
-                return;
-            }
-
-            let processed = data.map(cw => {
-                const open = isOpenNow(cw.open_time, cw.close_time);
-                const distance = getDistance(USER_LAT, USER_LON, cw.latitude, cw.longitude);
-                return { ...cw, isOpenNow: open, distance: distance.toFixed(1) };
-            });
-
-            if (filters.workTime === 'Открыто сейчас') {
-                processed = processed.filter(c => c.isOpenNow);
-            }
-
-            if (searchText) {
-                processed = processed.filter(c => c.name.toLowerCase().includes(searchText.toLowerCase()));
-            }
-
-            setCoworkings(processed);
-        } catch (err) {
-            console.warn(err);
-            setCoworkings([]);
-        }
-    }, [filters, searchText]);
-
-
+    // Загружаем фильтры при монтировании
     useEffect(() => {
         loadFilters();
     }, []);
 
+    // Обновляем список коворкингов при изменении фильтров или поиска
     useEffect(() => {
         loadCoworkings();
     }, [filters, searchText]);
+
+    // Слушаем изменения в AsyncStorage для обновления фильтров из других компонентов
+    useEffect(() => {
+        const checkFiltersUpdate = async () => {
+            try {
+                const saved = await AsyncStorage.getItem('@filters');
+                if (saved) {
+                    const newFilters = JSON.parse(saved);
+                    if (JSON.stringify(newFilters) !== JSON.stringify(filters)) {
+                        setFilters(newFilters);
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to check filters update', e);
+            }
+        };
+
+        // Проверяем каждые 2 секунды на изменения
+        const interval = setInterval(checkFiltersUpdate, 2000);
+        return () => clearInterval(interval);
+    }, [filters]);
 
     return (
         <Animated.View
@@ -216,8 +273,9 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
                     transform: [{ translateY: translateY.interpolate({ inputRange: [POS.full, POS.collapsed], outputRange: [POS.full, POS.collapsed] }) }],
                 },
             ]}
+            {...panResponder.panHandlers}
         >
-            <View style={styles.handleWrap} {...panResponder.panHandlers}>
+            <View style={styles.handleWrap}>
                 <View style={styles.handle} />
             </View>
 
