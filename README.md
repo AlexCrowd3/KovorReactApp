@@ -53,13 +53,14 @@ Kovor/
 │   └── HomeScreen.js          # Main app screen with coworking list
 │
 ├── components/
-│   └── CoworkingModal.js      # Modal for coworking details with images and info
+│   ├── CoworkingModal.js     
+│   ├── CoworkingModal.js    
+│   └── FilterModal.js 
 │
-├── styles/
-│   └── Typography.js          # Shared typography and font settings
-│
-└── utils/
-└── (future utilities, helpers)
+└── styles/
+    ├── themes.js     
+    ├── Fonts.js
+    └── Typography.js          # Shared typography and font settings
 
 ````
 
@@ -117,7 +118,5 @@ npx expo start
 ## 🧠 Future Improvements
 
 * 📍 Add map view with coworking locations
-* ❤️ Favorites & bookmarks
 * 🔎 Filter & search by amenities or price
-* 🌐 Multi-language support (EN / RU)
 * 🪄 Improved animation transitions
