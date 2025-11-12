@@ -1,4 +1,3 @@
-// src/components/FilterModal.js
 import React, { useState, useEffect, useContext } from 'react';
 import {
     View,
@@ -13,11 +12,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeContext } from '../context/ThemeContext';
 
 const DEFAULT_FILTERS = {
-    workTime: 'Открыто сейчас', // теперь одна опция
+    workTime: 'Открыто сейчас',
     network: 'Просто',
     distance: 2,
-    rating: null, // null = не выбран
-    cost: 'Платно', // одна опция
+    rating: null,
+    cost: 'Платно',
 };
 
 const { width, height } = Dimensions.get('window');
@@ -27,7 +26,6 @@ export default function FilterModal({ isVisible, onClose }) {
     const { theme } = useContext(ThemeContext);
     const styles = getStyles(theme);
 
-    // Загрузка фильтров из AsyncStorage при открытии
     useEffect(() => {
         const loadFilters = async () => {
             try {
@@ -78,7 +76,6 @@ export default function FilterModal({ isVisible, onClose }) {
                     contentContainerStyle={{ paddingBottom: 120 }}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Время работы */}
                     <Text style={styles.section}>Время работы</Text>
                     <View style={styles.row}>
                         {['Открыто сейчас', 'Круглосуточно'].map((option) => (
@@ -102,7 +99,6 @@ export default function FilterModal({ isVisible, onClose }) {
                         ))}
                     </View>
 
-                    {/* Рейтинг */}
                     <Text style={styles.section}>Рейтинг</Text>
                     <View style={styles.row}>
                         {['4.7', '4.5', '4.0'].map((option) => (
@@ -128,7 +124,6 @@ export default function FilterModal({ isVisible, onClose }) {
                         ))}
                     </View>
 
-                    {/* Стоимость */}
                     <Text style={styles.section}>Стоимость</Text>
                     <View style={styles.row}>
                         {['Платно', 'Бесплатно'].map((option) => (
@@ -168,7 +163,7 @@ export default function FilterModal({ isVisible, onClose }) {
                             } catch (e) {
                                 console.warn('Failed to save filters', e);
                             }
-                            onClose(); // закрыть модалку
+                            onClose();
                         }}
                     >
                         <Text style={styles.applyText}>Применить</Text>

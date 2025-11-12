@@ -28,12 +28,10 @@ export default function CoworkingModal({ isVisible, onClose, coworking }) {
     const timerRef = useRef(null);
     const panResponderRef = useRef(null);
 
-    // Инициализация PanResponder для свайпа
     useEffect(() => {
         panResponderRef.current = PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onPanResponderMove: (evt, gestureState) => {
-                // Свайп вниз для закрытия
                 if (gestureState.dy > 50) {
                     onClose();
                 }
@@ -105,7 +103,6 @@ export default function CoworkingModal({ isVisible, onClose, coworking }) {
                 <View style={styles.infoContainer}>
                     <Text style={styles.name}>{coworking.name}</Text>
 
-                    {/* Рейтинг */}
                     <View style={styles.ratingContainer}>
                         <View style={styles.ratingRow}>
                             <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -119,13 +116,11 @@ export default function CoworkingModal({ isVisible, onClose, coworking }) {
                         </View>
                     </View>
 
-                    {/* Стоимость */}
                     <View style={styles.infoRow}>
                         <Text style={styles.label}>Стоимость</Text>
                         <Text style={styles.value}>{coworking.cost}</Text>
                     </View>
 
-                    {/* Часы работы */}
                     <View style={styles.infoRow}>
                         <Text style={styles.label}>Часы работы</Text>
                         <Text style={styles.value}>Ежедневно {coworking.open_time}–{coworking.close_time}</Text>

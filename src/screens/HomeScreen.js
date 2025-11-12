@@ -106,12 +106,6 @@ export default function HomeScreen() {
         };
 
         loadCoworkings();
-        const interval = setInterval(loadCoworkings, 2000);
-
-        return () => {
-            isMounted = false;
-            clearInterval(interval);
-        };
     }, []);
 
 
@@ -146,7 +140,6 @@ export default function HomeScreen() {
                                 style={{ width: 30, height: 30, }}
                             />
                         </View>
-
                     </Marker>
                 ))}
             </MapView>

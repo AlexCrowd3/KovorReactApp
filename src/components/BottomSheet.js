@@ -152,11 +152,11 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
             if (saved) {
                 setFilters(JSON.parse(saved));
             } else {
-                setFilters({}); // если нет сохранённых фильтров, используем пустой объект
+                setFilters({});
             }
         } catch (e) {
             console.warn('Failed to load filters', e);
-            setFilters({}); // на случай ошибки
+            setFilters({});
         }
     }, []);
 
@@ -165,16 +165,11 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
         try {
             let query = supabase.from('coworkings').select('*');
 
-            // Фильтры применяем только если они существуют и не пустые
-            if (filters.network?.length > 0) query = query.in('network', filters.network);
-            if (filters.cost) query = query.eq('cost', filters.cost);
-            if (filters.rating) query = query.gte('rating', parseFloat(filters.rating));
-
             const { data, error } = await query;
 
             if (error) {
                 console.warn(error);
-                setCoworkings([]); // в случае ошибки показываем пустой массив
+                setCoworkings([]);
                 return;
             }
 
@@ -189,12 +184,10 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
                 return { ...cw, isOpenNow: open, distance: distance.toFixed(1) };
             });
 
-            // Применяем фильтр "Открыто сейчас" только если выбран
             if (filters.workTime === 'Открыто сейчас') {
                 processed = processed.filter(c => c.isOpenNow);
             }
 
-            // Применяем поиск по имени
             if (searchText) {
                 processed = processed.filter(c => c.name.toLowerCase().includes(searchText.toLowerCase()));
             }
@@ -202,7 +195,7 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
             setCoworkings(processed);
         } catch (err) {
             console.warn(err);
-            setCoworkings([]); // при ошибке показываем пустой массив
+            setCoworkings([]);
         }
     }, [filters, searchText]);
 
