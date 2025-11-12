@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity, Platform, ActivityIndicator, Image, Text } from 'react-native';
-import MapView, { PROVIDER_GOOGLE, Marker, Callout } from 'react-native-maps';
+import { View, StyleSheet, Dimensions, TouchableOpacity, Platform, ActivityIndicator, Text } from 'react-native';
+import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import Svg, { Path } from 'react-native-svg';
 import BottomSheet from '../components/BottomSheet';
@@ -10,6 +10,13 @@ import CoworkingModal from '../components/CoworkingModal';
 import { fetchCoworkings } from '../lib/supabase';
 
 const { width, height } = Dimensions.get('window');
+
+const OFFLINE_REGION = {
+    latitude: 59.9311,
+    longitude: 30.3609,
+    latitudeDelta: 0.5,
+    longitudeDelta: 0.5,
+};
 
 const INITIAL_REGION = {
     latitude: 59.9311,
@@ -37,11 +44,13 @@ export default function HomeScreen() {
     const [selectedCoworking, setSelectedCoworking] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [isDark, setIsDark] = useState(theme.mode === 'dark');
+    const [mapReady, setMapReady] = useState(false);
 
     useEffect(() => setIsDark(theme.mode === 'dark'), [theme]);
 
     const openFilter = () => setFilterVisible(true);
     const closeFilter = () => setFilterVisible(false);
+
     const openCoworkingModal = (cw) => {
         if (!cw) return;
         setSelectedCoworking(cw);
@@ -53,6 +62,7 @@ export default function HomeScreen() {
     // Получаем координаты пользователя
     useEffect(() => {
         let isMounted = true;
+
         (async () => {
             try {
                 const { status } = await Location.requestForegroundPermissionsAsync();
@@ -71,6 +81,10 @@ export default function HomeScreen() {
                 if (isMounted && coords?.latitude && coords?.longitude) {
                     setLocation({ latitude: coords.latitude, longitude: coords.longitude });
 
+                    const isInOfflineRegion =
+                        Math.abs(coords.latitude - OFFLINE_REGION.latitude) <= OFFLINE_REGION.latitudeDelta &&
+                        Math.abs(coords.longitude - OFFLINE_REGION.longitude) <= OFFLINE_REGION.longitudeDelta;
+
                     const newRegion = {
                         latitude: coords.latitude,
                         longitude: coords.longitude,
@@ -78,7 +92,11 @@ export default function HomeScreen() {
                         longitudeDelta: 0.02,
                     };
 
-                    mapRef.current?.animateToRegion(newRegion, 500);
+                    if (isInOfflineRegion) {
+                        mapRef.current?.animateToRegion(newRegion, 500);
+                    } else {
+                        mapRef.current?.animateToRegion(INITIAL_REGION, 500);
+                    }
                 }
             } catch (err) {
                 console.warn('Location error or timeout:', err);
@@ -88,6 +106,7 @@ export default function HomeScreen() {
         return () => { isMounted = false; };
     }, []);
 
+    // Загрузка коворкингов
     useEffect(() => {
         let isMounted = true;
 
@@ -95,9 +114,19 @@ export default function HomeScreen() {
             try {
                 const data = await fetchCoworkings();
                 const validData = Array.isArray(data)
-                    ? data.filter(cw => cw?.latitude && cw?.longitude && cw?.id)
+                    ? data.filter(cw => {
+                        const lat = Number(cw.latitude);
+                        const lng = Number(cw.longitude);
+
+                        return !isNaN(lat) && !isNaN(lng) && cw?.id &&
+                            Math.abs(lat - OFFLINE_REGION.latitude) <= OFFLINE_REGION.latitudeDelta &&
+                            Math.abs(lng - OFFLINE_REGION.longitude) <= OFFLINE_REGION.longitudeDelta;
+                    })
                     : [];
-                if (isMounted) setCoworkings(validData);
+
+                if (isMounted) {
+                    setCoworkings(validData);
+                }
             } catch (err) {
                 console.error('Ошибка при загрузке коворкингов:', err);
             } finally {
@@ -106,13 +135,15 @@ export default function HomeScreen() {
         };
 
         loadCoworkings();
-    }, []);
 
+        return () => { isMounted = false; };
+    }, []);
 
     if (loading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
                 <ActivityIndicator size="large" color={theme.green} />
+                <Text style={{ marginTop: 10, color: theme.textPrimary }}>Загрузка карты...</Text>
             </View>
         );
     }
@@ -127,22 +158,37 @@ export default function HomeScreen() {
                 customMapStyle={Platform.OS === 'android' && isDark ? darkMapStyle : []}
                 showsUserLocation={true}
                 showsMyLocationButton={false}
+                onMapReady={() => setMapReady(true)}
+                minZoomLevel={10}
+                maxZoomLevel={18}
+                scrollEnabled={true}
+                zoomEnabled={true}
+                cachedEnabled={true}
+                loadingEnabled={true}
             >
-                {coworkings.map(cw => (
+                {mapReady && coworkings.map(cw => (
                     <Marker
                         key={cw.id.toString()}
-                        coordinate={{ latitude: Number(cw.latitude), longitude: Number(cw.longitude) }}
+                        coordinate={{
+                            latitude: Number(cw.latitude),
+                            longitude: Number(cw.longitude)
+                        }}
                         onPress={() => openCoworkingModal(cw)}
-                    >
-                        <View style={{ backgroundColor: theme.background, alignItems: 'center', justifyContent: 'center', borderRadius: 40, }}>
-                            <Image
-                                source={{ uri: cw.logo_url }}
-                                style={{ width: 30, height: 30, }}
-                            />
-                        </View>
-                    </Marker>
+                        pinColor={theme.green}
+                        tracksViewChanges={false}
+                    />
                 ))}
             </MapView>
+
+            {/* Индикатор оффлайн зоны */}
+            <View style={styles.offlineIndicator}>
+                <Text style={[styles.offlineText, { color: theme.textPrimary }]}>
+                    Оффлайн карта: Санкт-Петербург и область
+                </Text>
+                <Text style={[styles.offlineText, { color: theme.textPrimary, fontSize: 10 }]}>
+                    Коворкингов: {coworkings.length}
+                </Text>
+            </View>
 
             <TouchableOpacity
                 style={styles.themeToggleBtn}
@@ -209,7 +255,7 @@ export default function HomeScreen() {
                     }}
                 >
                     <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <Path d="M10.3078 13.6923L15.1539 8.84619M20.1113 5.88867L16.0207 19.1833C15.6541 20.3747 15.4706 20.9707 15.1544 21.1683C14.8802 21.3396 14.5406 21.3683 14.2419 21.2443C13.8975 21.1014 13.618 20.5433 13.0603 19.428L10.4694 14.2461C10.3809 14.0691 10.3366 13.981 10.2775 13.9043C10.225 13.8363 10.1645 13.7749 10.0965 13.7225C10.0215 13.6647 9.93486 13.6214 9.76577 13.5369L4.57192 10.9399C3.45662 10.3823 2.89892 10.1032 2.75601 9.75879C2.63207 9.4601 2.66033 9.12023 2.83169 8.84597C3.02928 8.52974 3.62523 8.34603 4.81704 7.97932L18.1116 3.88867C19.0486 3.60038 19.5173 3.45635 19.8337 3.57253C20.1094 3.67373 20.3267 3.89084 20.4279 4.16651C20.544 4.48283 20.3999 4.95126 20.1119 5.88729L20.1113 5.88867Z" stroke={theme.textPrimary} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <Path d="M10.3078 13.6923L15.1539 8.84619M20.1113 5.88867L16.0207 19.1833C15.6541 20.3747 15.4706 20.9707 15.1544 21.1683C14.8802 21.3396 14.5406 21.3683 14.2419 21.2443C13.8975 21.1014 13.618 20.5433 13.0603 19.428L10.4694 14.2461C10.3809 14.0691 10.3366 13.981 10.2775 13.9043C10.225 13.8363 10.1645 13.7749 10.0965 13.7225C10.0215 13.6647 9.93486 13.6214 9.76577 13.5369L4.57192 10.9399C3.45662 10.3823 2.89892 10.1032 2.75601 9.75879C2.63207 9.4601 2.66033 9.12023 2.83169 8.84597C3.02928 8.52974 3.62523 8.34603 4.81704 7.97932L18.1116 3.88867C19.0486 3.60038 19.5173 3.45635 19.8337 3.57253C20.1094 3.67373 20.3267 3.89084 20.4279 4.16651C20.544 4.48283 20.3999 4.95126 20.1119 5.88729L20.1113 5.88867Z" stroke={theme.textPrimary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </Svg>
                 </TouchableOpacity>
             </View>
@@ -252,111 +298,18 @@ const getStyles = (theme) => StyleSheet.create({
         alignItems: 'center',
         zIndex: 10,
     },
-    customMarker: {
-        backgroundColor: theme.background,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: theme.green,
-        width: 40, // Фиксированная ширина
-        height: 40, // Фиксированная высота
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
-    },
-
-    markerLogo: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        marginRight: 6,
-    },
-
-    markerTextContainer: {
-        flex: 1,
-    },
-
-    markerText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: theme.textPrimary,
-    },
-    calloutContainer: {
-        backgroundColor: theme.background,
-        padding: 12,
-        borderRadius: 12,
-        minWidth: 120,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: theme.border,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        elevation: 5,
-    },
-    calloutImage: {
-        width: 50,
-        height: 50,
-        borderRadius: 8,
-        marginBottom: 8,
-    },
-    simpleMarker: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: theme.background,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 3,
-        borderColor: theme.green,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 5,
-    },
-
-    calloutText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: theme.textPrimary,
-        textAlign: 'center',
-    },
-
-    controls: {
-        position: 'absolute',
-        right: 18,
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        height: 130,
-    },
-
-    controlBtn: {
-        backgroundColor: theme.backgroundOpacity,
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginVertical: 6,
-    },
-
-    themeToggleBtn: {
+    offlineIndicator: {
         position: 'absolute',
         top: 70,
-        right: 18,
-        width: 40,
-        height: 40,
-        borderRadius: 12,
+        left: 18,
         backgroundColor: theme.backgroundOpacity,
-        justifyContent: 'center',
-        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
         zIndex: 10,
+    },
+    offlineText: {
+        fontSize: 12,
+        fontWeight: '500',
     },
 });
