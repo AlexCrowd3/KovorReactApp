@@ -324,6 +324,6 @@ const getStyles = (theme) =>
         },
         socialButtonText: {
             ...Typography.subheadline_regular,
-            color: '#FFF',
+            color: theme.textPrimary,
         },
     });

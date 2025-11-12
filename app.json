@@ -32,7 +32,7 @@
     "androidNavigationBar": {
       "backgroundColor": "#000000",
       "barStyle": "light-content",
-      "visible": true
+      "visible": "leanback"
     }
   }
 }
