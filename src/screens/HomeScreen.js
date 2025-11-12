@@ -315,8 +315,8 @@ export default function HomeScreen() {
                     onPress={() => {
                         if (!mapRef.current) return;
                         const region = {
-                            latitude: INITIAL_REGION.latitude,
-                            longitude: INITIAL_REGION.longitude,
+                            latitude: location.latitude,
+                            longitude: location.longitude,
                             latitudeDelta: 0.01,
                             longitudeDelta: 0.01,
                         };
@@ -333,8 +333,8 @@ export default function HomeScreen() {
                     onPress={() => {
                         if (!mapRef.current) return;
                         const region = {
-                            latitude: INITIAL_REGION.latitude,
-                            longitude: INITIAL_REGION.longitude,
+                            latitude: location.latitude,
+                            longitude: location.longitude,
                             latitudeDelta: 0.1,
                             longitudeDelta: 0.1,
                         };
