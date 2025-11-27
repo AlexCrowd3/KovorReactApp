@@ -89,8 +89,6 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
     const [coworkings, setCoworkings] = useState([]);
     const [filters, setFilters] = useState({});
     const [searchText, setSearchText] = useState('');
-
-    // Загрузка фильтров из AsyncStorage
     const loadFilters = useCallback(async () => {
         try {
             const saved = await AsyncStorage.getItem('@filters');
@@ -105,15 +103,12 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
         }
     }, []);
 
-    // Функция для переключения быстрых фильтров
     const toggleQuickFilter = async (key, value) => {
         let newFilters = { ...filters };
 
         if (key === 'rating' || key === 'cost' || key === 'workTime') {
-            // Для рейтинга, стоимости и времени работы - переключаем значение
             newFilters[key] = newFilters[key] === value ? null : value;
         } else {
-            // Для других фильтров (если будут) - работа с массивами
             const arr = newFilters[key] || [];
             newFilters[key] = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
         }
@@ -126,7 +121,6 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
         }
     };
 
-    // Основная функция загрузки и фильтрации коворкингов
     const loadCoworkings = useCallback(async () => {
         try {
             let query = supabase.from('coworkings').select('*');
@@ -234,17 +228,14 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
         };
     }, []);
 
-    // Загружаем фильтры при монтировании
     useEffect(() => {
         loadFilters();
     }, []);
 
-    // Обновляем список коворкингов при изменении фильтров или поиска
     useEffect(() => {
         loadCoworkings();
     }, [filters, searchText]);
 
-    // Слушаем изменения в AsyncStorage для обновления фильтров из других компонентов
     useEffect(() => {
         const checkFiltersUpdate = async () => {
             try {
@@ -260,7 +251,6 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
             }
         };
 
-        // Проверяем каждые 2 секунды на изменения
         const interval = setInterval(checkFiltersUpdate, 2000);
         return () => clearInterval(interval);
     }, [filters]);
@@ -273,9 +263,8 @@ const BottomSheet = ({ openFilter, openCoworkingModal }) => {
                     transform: [{ translateY: translateY.interpolate({ inputRange: [POS.full, POS.collapsed], outputRange: [POS.full, POS.collapsed] }) }],
                 },
             ]}
-            {...panResponder.panHandlers}
         >
-            <View style={styles.handleWrap}>
+            <View style={styles.handleWrap} {...panResponder.panHandlers}>
                 <View style={styles.handle} />
             </View>
 

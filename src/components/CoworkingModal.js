@@ -176,7 +176,7 @@ const getStyles = (theme) =>
             backgroundColor: theme.background,
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
-            height: height - 270,
+            height: height - 200,
         },
         swipeIndicator: {
             width: 40,
