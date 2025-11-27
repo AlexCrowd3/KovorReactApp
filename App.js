@@ -15,9 +15,8 @@ const Stack = createStackNavigator();
 export default function App() {
   useEffect(() => {
     if (Platform.OS === 'android') {
-      // Заливаем нижнюю панель навигации
       NavigationBar.setBackgroundColorAsync('#000000');
-      NavigationBar.setButtonStyleAsync('light'); // светлые иконки
+      NavigationBar.setButtonStyleAsync('light');
     }
   }, []);
 
@@ -27,7 +26,7 @@ export default function App() {
         <StatusBar
           backgroundColor="#000000"
           barStyle="light-content"
-          translucent={false} // отключает прозрачность статус бара
+          translucent={false}
         />
         <NavigationContainer>
           <Stack.Navigator
